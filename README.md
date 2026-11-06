@@ -1,75 +1,75 @@
 # Machine Learning Pipeline Project: 200+ Financial Indicators Stock Performance Prediction
 
-Questo progetto implementa una pipeline completa di Machine Learning per la classificazione predittiva delle performance azionarie statunitensi a partire dai bilanci societari (SEC 10-K filings).
+This project implements an end-to-end Machine Learning pipeline for the predictive classification of US stock market performance based on corporate financial statements (SEC 10-K filings).
 
-Il lavoro è sviluppato per il corso di **Machine Learning** (SUPSI) nel rispetto delle specifiche descritte in `Progetto.pdf`.
-
----
-
-## 1. Descrizione del Dataset e Contesto di Business
-
-### Origine dei Dati
-Il dataset utilizzato raccoglie oltre 200 indicatori finanziari per le società quotate sui mercati azionari statunitensi (NYSE, NASDAQ, AMEX) nel quinquennio **2014–2018**. I dati sono stati estratti tramite l'API di [Financial Modeling Prep](https://financialmodelingprep.com/developer/docs/) e derivano direttamente dai bilanci annuali ufficiali (Form 10-K).
-
-### Obiettivo di Modellazione
-L'obiettivo è comprendere se le metriche fondamentali di bilancio di un anno fiscale $T$ contengano un segnale predittivo sufficiente a prevedere la performance del prezzo del titolo nell'anno successivo $T+1$.
-
-- **Problema di Machine Learning**: Classificazione binaria supervisionata.
-- **Variabile Target (`Class`)**:
-  - `Class = 1`: Il prezzo del titolo azionario registra un rendimento positivo nell'anno solare successivo ($\text{Price Var} > 0\%$). Rappresenta i titoli da acquistare all'inizio dell'anno e vendere a fine anno.
-  - `Class = 0`: Il prezzo del titolo azionario registra un rendimento nullo o negativo nell'anno successivo ($\text{Price Var} \le 0\%$).
-
-### Dimensione dei Dati
-- **Volumi**: ~3.800–4.300 aziende per anno, per un totale di oltre 20.000 campioni sui 5 anni (2014–2018).
-- **Spazio delle Feature**: 225 colonne originali, comprendenti:
-  - Ticker aziendale (identificativo univoco).
-  - Variabile categorica `Sector` (es. *Technology, Healthcare, Financial Services, Industrials, Consumer Defensive*, ecc.).
-  - Variabili numeriche di bilancio (Stato Patrimoniale, Conto Economico, Rendiconto Finanziario, indicatori di crescita e multipli di mercato come P/E, P/B, EV/EBITDA, Debt/Equity, ROE, FCF).
-  - Variabile di leakage `[ANNO] PRICE VAR [%]` (da rimuovere).
-  - Target `Class`.
+The project is developed for the **Machine Learning** course (SUPSI) in compliance with the guidelines specified in `Progetto.pdf`.
 
 ---
 
-## 2. Metodologia di Validazione Temporale ("Out-of-Time")
+## 1. Dataset Description and Business Context
 
-Per garantire la massima correttezza scientifica ed evitare il fenomeno del **Data Leakage temporale** (imparare dal futuro o contaminare distribuzioni macroeconomiche distinte):
-1. **Training & Validation Set (Anni 2014–2017)**:
-   - I primi 4 anni storici (~17.500 osservazioni) sono utilizzati per l'addestramento, il preprocessing e la validazione incrociata.
-   - Per il tuning degli iperparametri viene impiegata una validazione temporale/rolling (`TimeSeriesSplit` o fold per anno solare), rispettando la freccia del tempo.
-2. **Test Set Finale Out-of-Sample (Anno 2018)**:
-   - L'ultimo anno (~4.300 osservazioni) è isolato rigorosamente come banco di prova "cieco".
-   - Non viene mai osservato durante il preprocessing o il tuning, simulando la reale decisione di un investitore a inizio 2018.
+### Data Source
+The dataset collects over 200 financial indicators for publicly traded companies on US stock markets (NYSE, NASDAQ, AMEX) over the five-year period **2014–2018**. The data was scraped via the [Financial Modeling Prep API](https://financialmodelingprep.com/developer/docs/) and originates directly from annual 10-K filings submitted to the SEC.
 
----
+### Modeling Objective
+The objective is to determine whether fundamental financial statement metrics from fiscal year $T$ carry sufficient predictive signal to forecast stock price performance in the following year $T+1$.
 
-## 3. Selezione delle Feature con LASSO ($L_1$ Regularization)
+- **Machine Learning Problem**: Supervised binary classification.
+- **Target Variable (`Class`)**:
+  - `Class = 1`: The stock price records a positive return in the subsequent calendar year ($\text{Price Var} > 0\%$). Represents stocks to buy at the beginning of the year and sell at year-end.
+  - `Class = 0`: The stock price records zero or negative return in the following year ($\text{Price Var} \le 0\%$).
 
-Dato l'elevato numero di feature (~220) a fronte di forte multicollinearità contabile e rumore statistico, il primo passo di modellazione prevede una selezione delle feature tramite **LASSO (Logistic Regression con penalizzazione $L_1$)**:
-
-### Perché LASSO?
-- **Sparsità**: A differenza della penalità $L_2$ (Ridge), $L_1$ azzera esattamente i coefficienti delle feature non informative o ridondanti, riducendo lo spazio a un sottoinsieme ristretto di variabili chiave.
-- **Efficienza computazionale**: Riduce la dimensionalità per modelli sensibili alla distanza (come KNN) e accelera il tuning.
-- **Interpretabilità**: Permette di ispezionare quali indicatori di bilancio hanno il maggior peso predittivo.
-
-### Calibrazione Operativa ed Esito della Selezione
-- **Problema di Underfitting Iniziale**: Una regolarizzazione $L_1$ con penalità eccessivamente severa e filtro a soglia media riduceva lo spazio a sole 7 feature, causando un grave impoverimento informativo sui bilanci.
-- **Soluzione Adottata**: Utilizzo del solutore stabile `liblinear` impostando `max_features=50` e ordinamento per coefficiente assoluto decrescente.
-- **Risultato Ottenuto**: Riduzione da **229 feature trasformate a 50 feature selezionate (compressione del 78.2%)**, garantendo il bilanciamento ideale tra riduzione del rumore e copertura di tutti i pilastri contabili.
-
-### Coerenza Economica e Macroeconomica dei Risultati
-L'ispezione dei coefficienti stimati da LASSO sul quadriennio 2014–2017 evidenzia una notevole coerenza con la storia economica del periodo:
-1. **Forte penalizzazione del settore energetico (`Sector_Energy = -0.497`)**: Riflette fedelmente il crollo del prezzo del petrolio greggio (WTI) crollato da oltre 100\$ a meno di 30\$ al barile tra il 2014 e inizio 2016.
-2. **Premio per i settori difensivi e a dividendo (`Sector_Utilities = +0.714`, `Sector_Financial Services = +0.380`, `Sector_Real Estate = +0.329`)**: In un contesto di tassi di interesse a zero (ZIRP) della Federal Reserve, il mercato ha cercato rendimento sicuro nei flussi di cassa regolari di utility e canoni immobiliari.
-3. **Solidità dei fondamentali microeconomici**: Indicatori come `3Y Dividend per Share Growth (+0.127)`, `5Y Dividend per Share Growth (+0.125)`, `10Y Net Income Growth (+0.082)` e `Gross Margin (+0.030)` mostrano coefficienti positivi stabili, confermando che le società con flussi di cassa reali e vantaggi competitivi duraturi (*economic moat*) sovraperformano con maggiore probabilità.
-
-### Limiti e Trade-off noti (Discussione critica)
-- **Variabili collineari**: In presenza di gruppi di feature fortemente correlate (es. `EBIT` vs `Operating Income`), LASSO tende a selezionarne una arbitrariamente, azzerando le altre.
-- **Relazioni non-lineari**: Essendo un modello lineare, LASSO potrebbe sottovalutare feature con impatti non-lineari (es. andamenti a "U" sui livelli ottimali di indebitamento).
-- **Sensibilità alla scala**: Richiede una robusta standardizzazione preliminare per evitare distorsioni da outlier estremi.
+### Data Dimensions
+- **Volume**: ~3,800–4,300 companies per year, totaling over 20,000 observations across all 5 years (2014–2018).
+- **Feature Space**: 225 original columns, consisting of:
+  - Company Ticker (unique identifier).
+  - Categorical feature `Sector` (e.g., *Technology, Healthcare, Financial Services, Industrials, Consumer Defensive*, etc.).
+  - Quantitative accounting features (Balance Sheet, Income Statement, Cash Flow Statement, growth indicators, and valuation multiples such as P/E, P/B, EV/EBITDA, Debt/Equity, ROE, FCF).
+  - Target leakage feature `[YEAR] PRICE VAR [%]` (strictly removed).
+  - Binary target `Class`.
 
 ---
 
-## 4. Struttura del Repository
+## 2. Temporal Validation Methodology ("Out-of-Time")
+
+To ensure scientific rigor and prevent **temporal data leakage** (look-ahead bias) and cross-sectional contamination:
+1. **Training & Validation Set (Years 2014–2017)**:
+   - The first four historical years (~17,500 observations) are allocated for model training, preprocessing fitting, and cross-validation.
+   - Hyperparameter tuning employs a temporal/rolling validation scheme (`TimeSeriesSplit` or annual split folds), respecting the forward arrow of time.
+2. **Final Out-of-Sample Test Set (Year 2018)**:
+   - The final available year (~4,300 observations) is strictly sequestered as a blind benchmark.
+   - It is never exposed during preprocessing or hyperparameter tuning, closely replicating the real-world scenario of an investor making decisions at the start of 2018.
+
+---
+
+## 3. Feature Selection with LASSO ($L_1$ Regularization)
+
+Given the high dimensionality (~220 features), high multicollinearity among accounting metrics, and statistical noise, feature selection is performed using **LASSO (Logistic Regression with $L_1$ penalty)**:
+
+### Why LASSO?
+- **Sparsity**: Unlike $L_2$ (Ridge) penalties, $L_1$ drives non-informative and redundant coefficients exactly to zero, compressing the space into a parsimonious set of key drivers.
+- **Computational Efficiency**: Reduces dimensionality for distance-sensitive models (such as KNN) and accelerates grid search tuning.
+- **Interpretability**: Enables inspection of specific accounting indicators that carry the strongest predictive weights.
+
+### Operational Calibration and Selection Results
+- **Initial Underfitting Challenge**: An overly aggressive initial $L_1$ penalty combined with an average-threshold filter collapsed the feature space to only 7 variables, risking severe accounting information loss across essential dimensions.
+- **Adopted Solution**: Utilization of the stable `liblinear` coordinate descent solver, configuring `max_features=50` ranked by absolute coefficient magnitude.
+- **Outcome**: Compression from **229 transformed features down to 50 selected features (78.2% dimensionality reduction)**, striking the optimal balance between noise suppression and comprehensive financial coverage.
+
+### Economic and Macroeconomic Alignment of Selected Weights
+Inspecting the estimated LASSO coefficients over the 2014–2017 training period reveals strong consistency with the macroeconomic reality of the era:
+1. **Heavily penalized Energy sector (`Sector_Energy = -0.497`)**: Accurately mirrors the historic 2014–2016 crude oil crash, where WTI prices plunged from over \$100 to under \$30 per barrel, causing widespread distress and sell-offs across US energy firms.
+2. **Premium on defensive and dividend-yielding sectors (`Sector_Utilities = +0.714`, `Sector_Financial Services = +0.380`, `Sector_Real Estate = +0.329`)**: Amid the Federal Reserve's Zero Interest Rate Policy (ZIRP), market participants actively engaged in "yield hunting," favoring stable cash flows and predictable distributions from utilities and REITs.
+3. **Solid microeconomic fundamentals**: Predictors such as `3Y Dividend per Share Growth (+0.127)`, `5Y Dividend per Share Growth (+0.125)`, `10Y Net Income Growth (+0.082)`, and `Gross Margin (+0.030)` display stable positive coefficients. This confirms that companies demonstrating durable competitive advantages (*economic moats*) and consistent real cash return to shareholders have a significantly higher likelihood of stock price appreciation.
+
+### Known Trade-offs and Limitations (Critical Discussion)
+- **Collinear Features**: When pairs or clusters of features exhibit near-perfect correlation (e.g., `EBIT` vs `Operating Income`), LASSO tends to select one arbitrarily and set the others to zero.
+- **Linearity Assumption**: Being a linear regularization method, LASSO may penalize non-linear relationships (e.g., inverted U-shaped relationships around optimal corporate leverage).
+- **Scale Sensitivity**: Requires robust scaling (`StandardScaler` / `RobustScaler`) to prevent extreme financial statement outliers from distorting coefficient shrinkage.
+
+---
+
+## 4. Repository Structure
 
 ```text
 Project/
@@ -79,6 +79,6 @@ Project/
 │   ├── 2016_Financial_Data.csv
 │   ├── 2017_Financial_Data.csv
 │   └── 2018_Financial_Data.csv
-├── Financial_Stock_Classification_Pipeline.ipynb  # Notebook principale end-to-end
-└── README.md                                     # Documentazione metodologica
+├── Financial_Stock_Classification_Pipeline.ipynb  # Main end-to-end notebook
+└── README.md                                     # Methodological documentation
 ```
